@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_markdown/flutter_markdown.dart'; // Add this import
 import '../providers/app_state.dart';
 
 class ChatScreen extends StatelessWidget {
@@ -9,8 +10,6 @@ class ChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = Provider.of<AppState>(context);
     final TextEditingController controller = TextEditingController();
-
-    // The explicit modes we defined in our AI service
     final List<String> modes = ['Tutor', 'Mock Interviewer', 'Evaluator', 'Motivator'];
 
     return Scaffold(
@@ -18,9 +17,61 @@ class ChatScreen extends StatelessWidget {
         title: const Text('AI Mentor'),
         backgroundColor: Colors.blueGrey[50],
       ),
+      // --- ADD THE ARCHIVE DRAWER ---
+      drawer: Drawer(
+        child: Column(
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blueGrey),
+              child: Center(
+                child: Text('Saved Conversations',
+                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_comment, color: Colors.blueGrey),
+              title: const Text('New Conversation', style: TextStyle(fontWeight: FontWeight.bold)),
+              onTap: () {
+                state.saveCurrentChat(); // Automatically saves and clears
+                Navigator.pop(context);
+              },
+            ),
+            const Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: state.archivedChats.length,
+                itemBuilder: (context, index) {
+                  final savedChat = state.archivedChats[index];
+                  return ListTile(
+                    leading: const Icon(Icons.history),
+                    title: Text(
+                      savedChat['preview'] ?? 'Untitled Chat',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    // --- THE DELETE BUTTON ---
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () {
+                        // Show a quick confirmation or just delete
+                        state.deleteSavedChat(index);
+                      },
+                    ),
+                    onTap: () {
+                      state.loadSavedChat(index);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
-          // --- 1. THE EXPLICIT MODE SWITCHER ---
+          // MODE SWITCHER
           Container(
             width: double.infinity,
             color: Colors.blueGrey[50],
@@ -53,7 +104,7 @@ class ChatScreen extends StatelessWidget {
           ),
           const Divider(height: 1, thickness: 1),
 
-          // --- 2. THE CHAT HISTORY ---
+          // CHAT HISTORY
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -70,7 +121,15 @@ class ChatScreen extends StatelessWidget {
                       color: isUser ? Colors.blueGrey[100] : Colors.grey[200],
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(msg['content'] ?? '', style: const TextStyle(fontSize: 16)),
+                    // --- RENDER MARKDOWN INSTEAD OF PLAIN TEXT ---
+                    child: MarkdownBody(
+                      data: msg['content'] ?? '',
+                      selectable: true, // Allows the user to copy text!
+                      styleSheet: MarkdownStyleSheet(
+                        p: const TextStyle(fontSize: 16),
+                        code: const TextStyle(backgroundColor: Colors.black12, fontFamily: 'monospace'),
+                      ),
+                    ),
                   ),
                 );
               },
@@ -79,7 +138,7 @@ class ChatScreen extends StatelessWidget {
 
           if (state.isTyping) const LinearProgressIndicator(),
 
-          // --- 3. THE MESSAGE INPUT ---
+          // MESSAGE INPUT
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(

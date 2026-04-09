@@ -6,9 +6,11 @@ class AppState extends ChangeNotifier {
   final OpenRouterService _aiService = OpenRouterService();
   final LocalStorageService _storage = LocalStorageService();
 
+  List<Map<String, dynamic>> chatHistory = [];
+  List<Map<String, dynamic>> archivedChats = [];
+
   Map<String, dynamic> userData = {};
   String currentMode = 'Tutor';
-  List<Map<String, String>> chatHistory = [];
   bool isTyping = false;
   bool isInitializing = true;
 
@@ -16,32 +18,10 @@ class AppState extends ChangeNotifier {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    userData = await _storage.loadUserData();
-    isInitializing = false;
-    notifyListeners();
-  }
-
   // --- CHAT LOGIC (This was missing!) ---
   void setMode(String mode) {
     currentMode = mode;
     notifyListeners();
-  }
-
-  Future<void> sendMessage(String text) async {
-    chatHistory.add({'role': 'user', 'content': text});
-    isTyping = true;
-    notifyListeners();
-
-    try {
-      String aiResponse = await _aiService.generateResponse(text, currentMode);
-      chatHistory.add({'role': 'ai', 'content': aiResponse});
-    } catch (e) {
-      chatHistory.add({'role': 'ai', 'content': 'Error details: $e'});
-    } finally {
-      isTyping = false;
-      notifyListeners();
-    }
   }
 
 
@@ -130,4 +110,115 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> _loadData() async {
+    userData = await _storage.loadUserData();
+
+    // Load persistent chat history
+    if (userData['current_chat'] != null) {
+      chatHistory = List<Map<String, dynamic>>.from(userData['current_chat']);
+    }
+    if (userData['archived_chats'] != null) {
+      archivedChats = List<Map<String, dynamic>>.from(userData['archived_chats']);
+    }
+
+    isInitializing = false;
+    notifyListeners();
+  }
+
+  // --- ADD THESE NEW CHAT MANAGEMENT METHODS ---
+  void _saveChatState() {
+    userData['current_chat'] = chatHistory;
+    userData['archived_chats'] = archivedChats;
+    _storage.saveUserData(userData);
+  }
+
+  void startNewChat() {
+    if (chatHistory.isNotEmpty) {
+      // Save current chat to archives with a preview snippet
+      archivedChats.insert(0, {
+        'preview': chatHistory.first['content'],
+        'messages': List.from(chatHistory),
+      });
+    }
+    chatHistory.clear();
+    _saveChatState();
+    notifyListeners();
+  }
+
+  void loadArchivedChat(int index) {
+    // Save the current chat before swapping
+    if (chatHistory.isNotEmpty) {
+      archivedChats.insert(0, {
+        'preview': chatHistory.first['content'],
+        'messages': List.from(chatHistory),
+      });
+    }
+    // Swap the requested chat into the active view
+    chatHistory = List<Map<String, dynamic>>.from(archivedChats[index]['messages']);
+    archivedChats.removeAt(index);
+
+    _saveChatState();
+    notifyListeners();
+  }
+
+  // --- UPDATE YOUR sendMessage METHOD ---
+  Future<void> sendMessage(String text) async {
+    chatHistory.add({'role': 'user', 'content': text});
+    isTyping = true;
+    _saveChatState(); // Save immediately so it persists if app crashes
+    notifyListeners();
+
+    try {
+      String aiResponse = await _aiService.generateResponse(text, currentMode);
+      chatHistory.add({'role': 'ai', 'content': aiResponse});
+      _saveChatState(); // Save final response
+    } catch (e) {
+      chatHistory.add({'role': 'ai', 'content': 'Error details: $e'});
+    } finally {
+      isTyping = false;
+      notifyListeners();
+    }
+  }
+
+
+  // --- UPDATED CHAT MANAGEMENT LOGIC ---
+
+  // Renamed for clarity: saves the active chat into the list
+  void saveCurrentChat() {
+    if (chatHistory.isNotEmpty) {
+      archivedChats.insert(0, {
+        'preview': chatHistory.first['content'],
+        'messages': List.from(chatHistory),
+      });
+      chatHistory.clear();
+      _saveChatState();
+      notifyListeners();
+    }
+  }
+
+  // New Feature: Delete a specific chat from the list
+  void deleteSavedChat(int index) {
+    archivedChats.removeAt(index);
+    _saveChatState();
+    notifyListeners();
+  }
+
+  void loadSavedChat(int index) {
+    // If current chat isn't empty, save it first so it isn't lost
+    if (chatHistory.isNotEmpty) {
+      archivedChats.insert(0, {
+        'preview': chatHistory.first['content'],
+        'messages': List.from(chatHistory),
+      });
+    }
+
+    // Load the selected chat
+    chatHistory = List<Map<String, dynamic>>.from(archivedChats[index]['messages']);
+    archivedChats.removeAt(index); // Remove it from the list since it's now active
+
+    _saveChatState();
+    notifyListeners();
+  }
+
 }

@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class OpenRouterService {
   // 1. Paste your OpenRouter API Key here
-  static const String _apiKey = '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';
+  static const String _apiKey = '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';
 
   // 2. The exact model tag for Gemma 3 27B on OpenRouter
   static const String _model = 'openrouter/free';
