@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class OpenRouterService {
   // 1. Paste your OpenRouter API Key here
-  static const String _apiKey = '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';
+  static final String _apiKey = dotenv.env['OPENROUTER_API_KEY'] ?? '';
 
   // 2. The exact model tag for Gemma 3 27B on OpenRouter
   static const String _model = 'openrouter/free';

@@ -5,8 +5,15 @@ import 'screens/dashboard_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/quiz_screen.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
+Future<void> main() async {
+  // 2. Ensure Flutter bindings are initialized before loading anything
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 3. Load the .env file
+  await dotenv.load(fileName: ".env");
+
   runApp(
     ChangeNotifierProvider(
       create: (context) => AppState(),
