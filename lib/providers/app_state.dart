@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
-import '../services/openrouter_service.dart';
+import '../services/api_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/secure_storage_service.dart';
 
 class AppState extends ChangeNotifier {
-  final OpenRouterService _aiService = OpenRouterService();
+  final ApiService _aiService = ApiService();
   final LocalStorageService _storage = LocalStorageService();
+  final SecureStorageService _secureStorage = SecureStorageService();
 
   List<Map<String, dynamic>> chatHistory = [];
   List<Map<String, dynamic>> archivedChats = [];
 
   Map<String, dynamic> userData = {};
+
+  // --- NEW BYOK PROPERTIES ---
+  String? apiEndpoint;
+  String? apiKey;
+  String? selectedModel;
+  bool isConfigured = false;
+
   String currentMode = 'Tutor';
   bool isTyping = false;
   bool isInitializing = true;
@@ -18,19 +27,28 @@ class AppState extends ChangeNotifier {
     _loadData();
   }
 
-  // --- CHAT LOGIC (This was missing!) ---
+  // --- BYOK SETUP LOGIC ---
+  Future<void> saveApiConfiguration(String endpoint, String key, String model) async {
+    await _secureStorage.saveCredentials(endpoint, key, model);
+    apiEndpoint = endpoint;
+    apiKey = key;
+    selectedModel = model;
+    isConfigured = true;
+    notifyListeners();
+  }
+
+  // --- CHAT LOGIC ---
   void setMode(String mode) {
     currentMode = mode;
     notifyListeners();
   }
-
 
   // --- ONBOARDING LOGIC ---
   Future<void> setLearningGoal(String goal) async {
     userData['goal'] = goal;
     userData['subjects'] = {
       goal: {
-        "Foundations": 10.0, // Use decimals now
+        "Foundations": 10.0,
       }
     };
     await _storage.saveUserData(userData);
@@ -40,7 +58,6 @@ class AppState extends ChangeNotifier {
   // --- QUIZ LOGIC ---
   Future<void> updateMastery(String subject, String topic, double scoreChange) async {
     num currentScore = userData['subjects'][subject][topic] ?? 0;
-    // Add change, clamp between 0 and 100, and ensure it's a double
     double newScore = (currentScore + scoreChange).clamp(0, 100).toDouble();
 
     userData['subjects'][subject][topic] = newScore;
@@ -49,16 +66,20 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String> fetchQuiz(String subject, String topic) async {
-    return await _aiService.generateQuizQuestion(subject, topic);
+    if (!isConfigured) throw Exception("API Not Configured");
+    return await _aiService.generateQuizQuestion(
+        subject: subject,
+        topic: topic,
+        endpoint: apiEndpoint!,
+        apiKey: apiKey!,
+        model: selectedModel!
+    );
   }
 
   // --- KNOWLEDGE MANAGEMENT LOGIC (CRUD) ---
   Future<void> addSubject(String subjectName) async {
     if (!userData['subjects'].containsKey(subjectName)) {
-      // FIX: Automatically add a default topic so the Quiz/Progress UI appears immediately
-      userData['subjects'][subjectName] = <String, dynamic>{
-        "Foundations": 0.0
-      };
+      userData['subjects'][subjectName] = <String, dynamic>{"Foundations": 0.0};
       await _storage.saveUserData(userData);
       notifyListeners();
     }
@@ -80,7 +101,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> addTopic(String subjectName, String topicName) async {
     if (userData['subjects'].containsKey(subjectName)) {
-      userData['subjects'][subjectName][topicName] = 0.0; // Use decimal
+      userData['subjects'][subjectName][topicName] = 0.0;
       await _storage.saveUserData(userData);
       notifyListeners();
     }
@@ -114,7 +135,13 @@ class AppState extends ChangeNotifier {
   Future<void> _loadData() async {
     userData = await _storage.loadUserData();
 
-    // Load persistent chat history
+    // Load BYOK Credentials
+    final creds = await _secureStorage.getCredentials();
+    apiEndpoint = creds['api_endpoint'];
+    apiKey = creds['api_key'];
+    selectedModel = creds['selected_model'];
+    isConfigured = (apiEndpoint != null && apiKey != null && selectedModel != null);
+
     if (userData['current_chat'] != null) {
       chatHistory = List<Map<String, dynamic>>.from(userData['current_chat']);
     }
@@ -126,16 +153,49 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- ADD THESE NEW CHAT MANAGEMENT METHODS ---
   void _saveChatState() {
     userData['current_chat'] = chatHistory;
     userData['archived_chats'] = archivedChats;
     _storage.saveUserData(userData);
   }
 
+  // --- STREAMING sendMessage METHOD ---
+  Future<void> sendMessage(String text) async {
+    if (!isConfigured) return;
+
+    chatHistory.add({'role': 'user', 'content': text});
+    // Add empty AI bubble to populate via stream
+    chatHistory.add({'role': 'ai', 'content': ''});
+    isTyping = true;
+    _saveChatState();
+    notifyListeners();
+
+    await _aiService.generateStreamResponse(
+        prompt: text,
+        mode: currentMode,
+        endpoint: apiEndpoint!,
+        apiKey: apiKey!,
+        model: selectedModel!,
+        onChunk: (chunk) {
+          chatHistory.last['content'] += chunk;
+          notifyListeners(); // Updates UI in real-time
+        },
+        onError: (error) {
+          chatHistory.last['content'] += '\nError details: $error';
+          isTyping = false;
+          notifyListeners();
+        },
+        onDone: () {
+          isTyping = false;
+          _saveChatState(); // Save final complete response
+          notifyListeners();
+        }
+    );
+  }
+
+  // --- CHAT MANAGEMENT LOGIC (Preserved) ---
   void startNewChat() {
     if (chatHistory.isNotEmpty) {
-      // Save current chat to archives with a preview snippet
       archivedChats.insert(0, {
         'preview': chatHistory.first['content'],
         'messages': List.from(chatHistory),
@@ -146,45 +206,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void loadArchivedChat(int index) {
-    // Save the current chat before swapping
-    if (chatHistory.isNotEmpty) {
-      archivedChats.insert(0, {
-        'preview': chatHistory.first['content'],
-        'messages': List.from(chatHistory),
-      });
-    }
-    // Swap the requested chat into the active view
-    chatHistory = List<Map<String, dynamic>>.from(archivedChats[index]['messages']);
-    archivedChats.removeAt(index);
-
-    _saveChatState();
-    notifyListeners();
-  }
-
-  // --- UPDATE YOUR sendMessage METHOD ---
-  Future<void> sendMessage(String text) async {
-    chatHistory.add({'role': 'user', 'content': text});
-    isTyping = true;
-    _saveChatState(); // Save immediately so it persists if app crashes
-    notifyListeners();
-
-    try {
-      String aiResponse = await _aiService.generateResponse(text, currentMode);
-      chatHistory.add({'role': 'ai', 'content': aiResponse});
-      _saveChatState(); // Save final response
-    } catch (e) {
-      chatHistory.add({'role': 'ai', 'content': 'Error details: $e'});
-    } finally {
-      isTyping = false;
-      notifyListeners();
-    }
-  }
-
-
-  // --- UPDATED CHAT MANAGEMENT LOGIC ---
-
-  // Renamed for clarity: saves the active chat into the list
   void saveCurrentChat() {
     if (chatHistory.isNotEmpty) {
       archivedChats.insert(0, {
@@ -197,7 +218,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // New Feature: Delete a specific chat from the list
   void deleteSavedChat(int index) {
     archivedChats.removeAt(index);
     _saveChatState();
@@ -205,20 +225,17 @@ class AppState extends ChangeNotifier {
   }
 
   void loadSavedChat(int index) {
-    // If current chat isn't empty, save it first so it isn't lost
     if (chatHistory.isNotEmpty) {
       archivedChats.insert(0, {
         'preview': chatHistory.first['content'],
         'messages': List.from(chatHistory),
       });
     }
-
-    // Load the selected chat
     chatHistory = List<Map<String, dynamic>>.from(archivedChats[index]['messages']);
-    archivedChats.removeAt(index); // Remove it from the list since it's now active
-
+    archivedChats.removeAt(index);
     _saveChatState();
     notifyListeners();
   }
 
+  void loadArchivedChat(int index) => loadSavedChat(index);
 }

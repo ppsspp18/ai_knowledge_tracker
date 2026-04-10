@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import 'quiz_screen.dart';
+import 'byok_setup_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -41,8 +42,24 @@ class DashboardScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Knowledge Map'),
+        title: const Text('Knowledge Tracker'),
         backgroundColor: Colors.blueGrey[50],
+        // --- ADD THE ACTIONS ARRAY HERE ---
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'API Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BYOKSetupScreen(isSettingsMode: true),
+                ),
+              );
+            },
+          )
+        ],
+        // ----------------------------------
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showInputDialog(

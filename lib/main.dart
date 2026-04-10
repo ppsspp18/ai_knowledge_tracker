@@ -4,15 +4,14 @@ import 'providers/app_state.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/quiz_screen.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'screens/byok_setup_screen.dart'; // ADD THIS
+// import 'package:flutter_dotenv/flutter_dotenv.dart'; // Optional: remove if unused
+
 
 Future<void> main() async {
-  // 2. Ensure Flutter bindings are initialized before loading anything
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 3. Load the .env file
-  await dotenv.load(fileName: ".env");
+  // await dotenv.load(fileName: ".env"); // Optional: remove if fully BYOK now
 
   runApp(
     ChangeNotifierProvider(
@@ -58,12 +57,17 @@ class _MainLayoutState extends State<MainLayout> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 2. Show Onboarding if no goal is set
+    // 2. NEW: Enforce BYOK setup before anything else
+    if (!state.isConfigured) {
+      return const BYOKSetupScreen();
+    }
+
+    // 3. Show original Onboarding if no learning goal is set
     if (state.userData['goal'] == null) {
       return const OnboardingScreen();
     }
 
-    // 3. Show Main App
+    // 4. Show Main App
     return Scaffold(
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
