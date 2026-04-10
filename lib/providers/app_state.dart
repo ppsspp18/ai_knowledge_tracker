@@ -48,7 +48,7 @@ class AppState extends ChangeNotifier {
     userData['goal'] = goal;
     userData['subjects'] = {
       goal: {
-        "Foundations": 10.0,
+        "Foundations": 0.0,
       }
     };
     await _storage.saveUserData(userData);

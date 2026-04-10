@@ -36,7 +36,7 @@ class _QuizScreenState extends State<QuizScreen> {
       setState(() {
         question = parts[0];
         options = [parts[1], parts[2], parts[3], parts[4]];
-        correctIndex = int.parse(parts[5]);
+        correctIndex = int.parse(parts[5].trim());
         isLoading = false;
       });
     } catch (e) {

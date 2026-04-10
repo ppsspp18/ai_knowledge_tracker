@@ -32,8 +32,8 @@ class ApiService {
       request.body = jsonEncode({
         "model": model.trim(),
         "messages": [
-          {"role": "system", "content": systemPrompt},
-          {"role": "user", "content": prompt}
+          //{"role": "system", "content": systemPrompt},
+          {"role": "user", "content": "System Instruction: $systemPrompt\n\nUser Question: $prompt"}
         ],
         "stream": true
       });
@@ -97,8 +97,7 @@ class ApiService {
     required String apiKey,
     required String model,
   }) async {
-    //final url = Uri.parse(endpoint.trim());
-    final url = Uri.parse('https://api.exact-url-from-postman.com/api/chat');
+    final url = Uri.parse(endpoint.trim());
     final response = await http.post(
       url,
       headers: {
@@ -111,13 +110,13 @@ class ApiService {
         "model": model.trim(),
         "stream": false,
         "messages": [
-          {
-            "role": "system",
-            "content": "You are a rigid quiz generator. You MUST output ONLY ONE line of text formatted exactly like this: Question|Option0|Option1|Option2|Option3|CorrectIndex(0-3). Do NOT include introductions, explanations, or markdown blocks."
-          },
+          //{
+            //"role": "system",
+            //"content": "You are a rigid quiz generator. You MUST output ONLY ONE line of text formatted exactly like this: Question|Option0|Option1|Option2|Option3|CorrectIndex(0-3). Do NOT include introductions, explanations, or markdown blocks."
+          //},
           {
             "role": "user",
-            "content": "Generate 1 multiple-choice question about '$topic' in '$subject'."
+            "content": "System Instruction: You are a rigid quiz generator. You MUST output ONLY ONE line of text formatted exactly like this: Question|Option0|Option1|Option2|Option3|CorrectIndex(0-3)|. Do NOT include introductions, explanations, or markdown blocks.\n\nUser Request: Generate 1 multiple-choice question about '$topic' in '$subject'."
           }
         ]
       }),
@@ -134,16 +133,24 @@ class ApiService {
         rawOutput = data['message']['content'];
       }
 
-      // BULLETPROOF PARSER: Even if the AI gets chatty, this finds the quiz line
+      // BULLETPROOF PARSER: Even if the AI gets chatty or adds trailing pipes
       final lines = rawOutput.split('\n');
       for (var line in lines) {
-        // A valid quiz line will split into exactly 6 pieces based on the '|' character
-        if (line.split('|').length == 6) {
-          return line.trim();
+        String cleanLine = line.trim();
+
+        // Gemma 3 sometimes adds a trailing pipe. Remove it.
+        if (cleanLine.endsWith('|')) {
+          cleanLine = cleanLine.substring(0, cleanLine.length - 1);
+        }
+
+        // A valid quiz line will now split into exactly 6 pieces
+        if (cleanLine.split('|').length == 6) {
+          return cleanLine;
         }
       }
 
       throw Exception('AI did not format the quiz properly. Output was: $rawOutput');
+
     } else {
       throw Exception('API Error: ${response.statusCode}');
     }

@@ -69,7 +69,7 @@ class _BYOKSetupScreenState extends State<BYOKSetupScreen> {
               controller: _endpointController,
               decoration: const InputDecoration(
                   labelText: 'Full API Endpoint URL',
-                  helperText: 'e.g., https://openrouter.ai/api/v1/chat/completions',
+                  helperText: 'e.g., https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
                   border: OutlineInputBorder()
               ),
             ),

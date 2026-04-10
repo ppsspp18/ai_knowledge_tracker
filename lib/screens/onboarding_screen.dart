@@ -42,7 +42,7 @@ class OnboardingScreen extends StatelessWidget {
                   ),
                   ActionChip(
                     label: const Text("SAS Programming"),
-                    onPressed: () => _goalController.text = "SAS Programming",
+                    onPressed: () => _goalController.text = "C++ Programming",
                   ),
                   ActionChip(
                     label: const Text("Culvert Design"),
